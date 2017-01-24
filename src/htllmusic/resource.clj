@@ -33,6 +33,12 @@
     (do (swap! index* update-in [type :primary id] merge resource)
         (pubsub/publish :index-update))))
 
+(defn find-by-value
+  [resource-type k v]
+  (->> (retrieve {:resource/type resource-type})
+       (filter #(= v (get % k)))
+       first))
+
 (defn persist
   []
   (future (spit file-path (pr-str @index*))))

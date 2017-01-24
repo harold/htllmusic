@@ -1,5 +1,6 @@
 (ns htllmusic.core
-  (:require [ring.util.response :refer [response redirect]]
+  (:require [clojure.string :as s]
+            [ring.util.response :refer [response redirect]]
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
@@ -9,7 +10,8 @@
             [hiccup.page :refer [html5]]
             [garden.core :refer [css]]
             [garden.units :refer [px]]
-            [htllmusic.resource :as resource])
+            [htllmusic.resource :as resource]
+            [htllmusic.email :as email])
   (:gen-class))
 
 (defn htll-css
@@ -47,9 +49,9 @@
             [:input {:type :submit}]]
            [:a {:href "/"} "Index"]])
     :post
-    (let [email (:email (:params req))]
-      (println email)
-      (comment "Send email...")
+    (let [email (-> req :params :email s/trim s/lower-case)
+          user (resource/find-by-value :resource.type/user :user/email email)]
+      (when user (email/send-email email "[htllmusic] Login Link" "http://localhost:8080/users"))
       (page [:div.artist-login
              [:h1 "HTLL"]
              [:p "Check your email for login link..."]
@@ -89,12 +91,22 @@
                      :release/date (parse-date date)}))
   (redirect "/releases"))
 
+(defn users-handler
+  [req]
+  (let [users (resource/retrieve {:resource/type :resource.type/user})]
+    (page [:div.users-page
+           [:div [:tt "U S E R S"]]
+           (into [:ol]
+                 (for [user (sort-by :user/name users)]
+                   [:li (:user/name user) " (" (:user/email user) ")"]))])))
+
 (def handler
   (bidi-ring/make-handler
    ["/" {"" #'index-handler
          "artist-login" #'artist-login-handler
          "releases" #'releases-handler
-         "release/" {"create" #'release-create-handler}}]))
+         "release/" {"create" #'release-create-handler}
+         "users" #'users-handler}]))
 
 (defonce stop-fn* (atom nil))
 
