@@ -51,11 +51,30 @@
     :post
     (let [email (-> req :params :email s/trim s/lower-case)
           user (resource/find-by-value :resource.type/user :user/email email)]
-      (when user (email/send-email email "[htllmusic] Login Link" "http://localhost:8080/users"))
+      (when user
+        (let [login-key (java.util.UUID/randomUUID)
+              id (:resource/id user)
+              existing-keys (:user/login-keys user #{})
+              link (format "http://localhost:8080/l/%s" login-key)
+              body (format "Click this link to login:\n%s" link)]
+          (resource/store {:resource/type :resource.type/user
+                           :resource/id id
+                           :user/login-keys (conj existing-keys login-key)})
+          (email/send-email email "[htllmusic] Login Link" body)))
       (page [:div.artist-login
              [:h1 "HTLL"]
              [:p "Check your email for login link..."]
              [:a {:href "/"} "Index"]]))))
+
+(defn l-handler
+  [req]
+  (let [login-key (java.util.UUID/fromString (-> req :params :id))
+        users (resource/retrieve {:resource/type :resource.type/user})
+        user (->> users
+                  (filter (fn [{:keys [:user/login-keys]}]
+                            (login-keys login-key)))
+                  (first))]
+    (page [:div (format "Hello, %s." (:user/name user))])))
 
 (defn releases-handler
   [req]
@@ -98,12 +117,14 @@
            [:div [:tt "U S E R S"]]
            (into [:ol]
                  (for [user (sort-by :user/name users)]
-                   [:li (:user/name user) " (" (:user/email user) ")"]))])))
+                   [:li (:user/name user) " (" (:user/email user) ")"]))
+           [:a {:href "/"} "Index"]])))
 
 (def handler
   (bidi-ring/make-handler
    ["/" {"" #'index-handler
          "artist-login" #'artist-login-handler
+         "l/" {[:id] #'l-handler}
          "releases" #'releases-handler
          "release/" {"create" #'release-create-handler}
          "users" #'users-handler}]))

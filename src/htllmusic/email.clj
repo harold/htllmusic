@@ -19,7 +19,7 @@
         email-key (:key @email-config*)]
     (http/post (str "https://api.mailgun.net/v3/" domain "/messages")
                {:basic-auth ["api" email-key]
-                :form-params {:from "admin@htllmusic.com"
+                :form-params {:from "htlladmin@htllmusic.com"
                               :to to
                               :subject subject
                               :html body}})))
