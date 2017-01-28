@@ -6,7 +6,8 @@
                  [http-kit "2.2.0"]
                  [bidi "2.0.16"]
                  [hiccup "1.0.5"]
-                 [garden "1.3.2"]]
+                 [garden "1.3.2"]
+                 [prone "1.1.4"]]
   :main ^:skip-aot htllmusic.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
