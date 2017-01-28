@@ -4,6 +4,9 @@
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.middleware.cookies :refer [wrap-cookies]]
+            [prone.middleware :refer [wrap-exceptions]]
+            [prone.debug :refer [debug]]
             [org.httpkit.server :as server]
             [bidi.bidi :as bidi]
             [bidi.ring :as bidi-ring]
@@ -16,18 +19,30 @@
 
 (defn htll-css
   []
-  (css [[:* {:margin 0 :padding 0}]
+  (css {:pretty-print? false}
+       [[:* {:margin 0 :padding 0}]
         [:body {:padding (px 10)
                 :font-family :sans-serif
                 :color :#222
                 :background :#f8f8f8}]]))
 
 (defn page
-  [content]
-  (response (html5 [:head
-                    [:title "htllmusic"]
-                    [:style (htll-css)]]
-                   [:body content])))
+  [content & {:keys [:cookies]}]
+  (merge
+   (response (html5 [:head
+                     [:title "htllmusic"]
+                     [:style (htll-css)]]
+                    [:body content]))
+   (if cookies {:cookies cookies})))
+
+(defn cookie
+  [k v & {:keys [days
+                 path]
+          :or {days 1000
+               path "/"}}]
+  {k {:value v
+      :max-age (* 60 60 24 days)
+      :path path}})
 
 (defn index-handler
   [req]
@@ -66,15 +81,22 @@
              [:p "Check your email for login link..."]
              [:a {:href "/"} "Index"]]))))
 
+(defn login-key-str->user
+  [k]
+  (let [login-key (java.util.UUID/fromString k)]
+    (->> (resource/retrieve {:resource/type :resource.type/user})
+         (filter (fn [{:keys [:user/login-keys]}]
+                   (login-keys login-key)))
+         (first))))
+
 (defn l-handler
   [req]
-  (let [login-key (java.util.UUID/fromString (-> req :params :id))
-        users (resource/retrieve {:resource/type :resource.type/user})
-        user (->> users
-                  (filter (fn [{:keys [:user/login-keys]}]
-                            (login-keys login-key)))
-                  (first))]
-    (page [:div (format "Hello, %s." (:user/name user))])))
+  (let [k (-> req :params :id)
+        user (login-key-str->user k)]
+    (if user
+      (page [:div (format "Hello, %s." (:user/name user))]
+            :cookies (cookie "k" k))
+      (redirect "/"))))
 
 (defn releases-handler
   [req]
@@ -120,6 +142,15 @@
                    [:li (:user/name user) " (" (:user/email user) ")"]))
            [:a {:href "/"} "Index"]])))
 
+(defn wrap-auth
+  [handler]
+  (fn [req]
+    (if-let [k (get-in req [:cookies "k" :value])]
+      (if-let [user (login-key-str->user k)]
+        (handler (assoc req :user user))
+        (handler req))
+      (handler req))))
+
 (def handler
   (bidi-ring/make-handler
    ["/" {"" #'index-handler
@@ -135,13 +166,17 @@
   [& {:keys [port]
       :or {port 8080}}]
   (let [app (-> #'handler
+                wrap-exceptions ;; TODO: not in production
+                wrap-auth
+                wrap-cookies
                 wrap-keyword-params
                 wrap-params
                 (wrap-resource "public"))]
     (->> (server/run-server app {:port port})
          (reset! stop-fn*))
     (println "Started server on port" port))
-  (resource/start))
+  (resource/start)
+  :started)
 
 (defn stop
   []
@@ -155,7 +190,8 @@
   []
   (stop)
   (start)
-  (resource/restart))
+  (resource/restart)
+  :restarted)
 
 (defn -main
   [& args]
