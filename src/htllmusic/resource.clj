@@ -39,13 +39,30 @@
        (filter #(= v (get % k)))
        first))
 
+(defn produce-user-login-secondary-index
+  "TODO: Replace this with something more general."
+  []
+  (reduce (fn [eax user]
+            (reduce (fn [eay k]
+                      (assoc eay k (:resource/id user)))
+                    eax
+                    (:user/login-keys user)))
+          {}
+          (retrieve {:resource/type :resource.type/user})))
+
 (defn persist
   []
   (future (spit file-path (pr-str @index*))))
 
+(defn on-index-update
+  []
+  (swap! index* assoc-in [:resource.type/user :login-index]
+         (produce-user-login-secondary-index))
+  (persist))
+
 (defn start
   []
-  (reset! unsub-fn* (pubsub/subscribe :index-update persist))
+  (reset! unsub-fn* (pubsub/subscribe :index-update on-index-update))
   (let [f (io/file file-path)]
     (if (.exists f)
       (reset! index* (edn/read-string (slurp f))))))
