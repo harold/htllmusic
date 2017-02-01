@@ -50,7 +50,9 @@
          [:h1 "HTLL"]
          [:div [:tt "I N D E X"]]
          [:div [:a {:href "/releases"} "Releases"]]
-         [:div [:a {:href "/artist-login"} "Artist login"]]]))
+         (if (:user req)
+           [:div [:a {:href "/logout"} "Logout"]]
+           [:div [:a {:href "/artist-login"} "Artist login"]])]))
 
 (defn artist-login-handler
   [req]
@@ -94,9 +96,16 @@
   (let [k (-> req :params :id)
         user (login-key-str->user k)]
     (if user
-      (page [:div (format "Hello, %s." (:user/name user))]
+      (page [:div.l-page
+             [:p (format "Hello, %s." (:user/name user))]
+             [:a {:href "/"} "Index"]]
             :cookies (cookie "k" k))
       (redirect "/"))))
+
+(defn logout-handler
+  [req]
+  (-> (redirect "/")
+      (assoc :cookies (cookie "k" "" :days 0))))
 
 (defn releases-handler
   [req]
@@ -156,6 +165,7 @@
    ["/" {"" #'index-handler
          "artist-login" #'artist-login-handler
          "l/" {[:id] #'l-handler}
+         "logout" #'logout-handler
          "releases" #'releases-handler
          "release/" {"create" #'release-create-handler}
          "users" #'users-handler}]))
