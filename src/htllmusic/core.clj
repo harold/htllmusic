@@ -1,6 +1,6 @@
 (ns htllmusic.core
   (:require [clojure.string :as s]
-            [ring.util.response :refer [response redirect]]
+            [ring.util.response :refer [redirect]]
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
@@ -10,55 +10,27 @@
             [org.httpkit.server :as server]
             [bidi.bidi :as bidi]
             [bidi.ring :as bidi-ring]
-            [hiccup.page :refer [html5]]
-            [garden.core :refer [css]]
-            [garden.units :refer [px]]
+            [htllmusic.util :as util]
             [htllmusic.resource :as resource]
             [htllmusic.email :as email])
   (:gen-class))
 
-(defn htll-css
-  []
-  (css {:pretty-print? false}
-       [[:* {:margin 0 :padding 0}]
-        [:body {:padding (px 10)
-                :font-family :sans-serif
-                :color :#222
-                :background :#f8f8f8}]]))
-
-(defn page
-  [content & {:keys [:cookies]}]
-  (merge
-   (response (html5 [:head
-                     [:title "htllmusic"]
-                     [:style (htll-css)]]
-                    [:body content]))
-   (if cookies {:cookies cookies})))
-
-(defn cookie
-  [k v & {:keys [days
-                 path]
-          :or {days 1000
-               path "/"}}]
-  {k {:value v
-      :max-age (* 60 60 24 days)
-      :path path}})
-
 (defn index-handler
   [req]
-  (page [:div.index-page
-         [:h1 "HTLL"]
-         [:div [:tt "I N D E X"]]
-         [:div [:a {:href "/releases"} "Releases"]]
-         (if (:user req)
-           [:div [:a {:href "/logout"} "Logout"]]
-           [:div [:a {:href "/artist-login"} "Artist login"]])]))
+  (util/page
+   [:div.index-page
+    [:h1 "HTLL"]
+    (util/nav [{:url "/artists" :link "Artists"}
+               {:url "/releases" :link "Releases"}
+               (if (:user req)
+                 {:url "/logout" :link "Logout"}
+                 {:url "/artist-login" :link "Artist login"})])]))
 
 (defn artist-login-handler
   [req]
   (condp = (:request-method req)
     :get
-    (page [:div.artist-login
+    (util/page [:div.artist-login
            [:h1 "HTLL"]
            [:div [:tt "A R T I S T - L O G I N"]]
            [:form {:method :post :action "/artist-login"}
@@ -78,7 +50,7 @@
                            :resource/id id
                            :user/login-keys (conj existing-keys login-key)})
           (email/send-email email "[htllmusic] Login Link" body)))
-      (page [:div.artist-login
+      (util/page [:div.artist-login
              [:h1 "HTLL"]
              [:p "Check your email for login link..."]
              [:a {:href "/"} "Index"]]))))
@@ -96,21 +68,21 @@
   (let [k (-> req :params :id)
         user (login-key-str->user k)]
     (if user
-      (page [:div.l-page
+      (util/page [:div.l-page
              [:p (format "Hello, %s." (:user/name user))]
              [:a {:href "/"} "Index"]]
-            :cookies (cookie "k" k))
+            :cookies (util/cookie "k" k))
       (redirect "/"))))
 
 (defn logout-handler
   [req]
   (-> (redirect "/")
-      (assoc :cookies (cookie "k" "" :days 0))))
+      (assoc :cookies (util/cookie "k" "" :days 0))))
 
 (defn releases-handler
   [req]
   (let [releases (resource/retrieve {:resource/type :resource.type/release})]
-    (page [:div.releases-page
+    (util/page [:div.releases-page
            [:div [:tt "R E L E A S E S"]]
            [:div "Create release:"
             [:form {:action "/release/create" :method :post}
@@ -144,7 +116,7 @@
 (defn users-handler
   [req]
   (let [users (resource/retrieve {:resource/type :resource.type/user})]
-    (page [:div.users-page
+    (util/page [:div.users-page
            [:div [:tt "U S E R S"]]
            (into [:ol]
                  (for [user (sort-by :user/name users)]
